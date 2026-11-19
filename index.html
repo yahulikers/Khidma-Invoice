@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#525fe1">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Khidma Invoice">
+<title>Khidma Invoice — PT. Khidma Group Wisata</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" type="image/png" href="assets/favicon.png">
+<link rel="apple-touch-icon" href="assets/apple-touch-icon.png">
+<link rel="stylesheet" href="css/app.css">
+<link rel="stylesheet" href="css/invoice.css">
+</head>
+<body>
+
+<!-- ================= LOGIN / SETUP ================= -->
+<div class="auth" id="authScreen">
+  <aside class="auth-hero">
+    <div class="hero-card"><img src="assets/logo.png" alt="Khidma Tour"></div>
+    <h2>Invoice Generator</h2>
+    <p>Buat, simpan, dan cetak invoice jamaah dengan rapi — dari komputer maupun HP.</p>
+    <div class="hero-dots"><i></i><i></i><i></i></div>
+  </aside>
+  <main class="auth-side">
+    <div class="auth-box">
+      <div class="auth-mobile-logo"><img src="assets/logo.png" alt="Khidma Tour"></div>
+
+      <!-- Login -->
+      <form id="loginForm" autocomplete="on">
+        <h1>Masuk</h1>
+        <p class="sub">Silakan login untuk mengakses aplikasi invoice.</p>
+        <div id="loginAlert" class="alert err hidden"></div>
+        <div class="field"><label for="lUser">Email</label><input id="lUser" name="email" type="email" autocomplete="username" autocapitalize="none" inputmode="email" required></div>
+        <div class="field"><label for="lPass">Password</label><div class="pw"><input id="lPass" name="password" type="password" autocomplete="current-password" required><button type="button" class="eye" data-eye="lPass">Lihat</button></div></div>
+        <button class="btn btn-primary btn-block" id="loginBtn" type="submit" style="margin-top:14px">Masuk</button>
+        <div style="text-align:center;margin-top:10px"><button type="button" class="link" id="toForgot">Lupa password?</button></div>
+      </form>
+
+      <!-- Lupa password -->
+      <form id="forgotForm" class="hidden">
+        <h1>Reset Password</h1>
+        <p class="sub">Masukkan email akun Anda. Kami kirim tautan untuk membuat password baru.</p>
+        <div id="forgotAlert" class="alert err hidden"></div>
+        <div class="field"><label for="fEmail">Email</label><input id="fEmail" type="email" autocomplete="email" inputmode="email" required></div>
+        <button class="btn btn-primary btn-block" id="forgotBtn" type="submit">Kirim tautan reset</button>
+        <div style="text-align:center;margin-top:10px"><button type="button" class="link" id="toLogin">← Kembali ke login</button></div>
+      </form>
+
+      <!-- Password baru (dari tautan email) -->
+      <form id="resetForm" class="hidden">
+        <h1>Password Baru</h1>
+        <p class="sub">Buat password baru untuk akun Anda.</p>
+        <div id="resetAlert" class="alert err hidden"></div>
+        <div class="field"><label for="rPass">Password baru (min. 8 karakter)</label><div class="pw"><input id="rPass" type="password" autocomplete="new-password" minlength="8" required><button type="button" class="eye" data-eye="rPass">Lihat</button></div></div>
+        <button class="btn btn-primary btn-block" type="submit">Simpan &amp; Masuk</button>
+      </form>
+
+      <!-- Belum dikonfigurasi -->
+      <div id="configMissing" class="hidden">
+        <h1>Belum Terhubung</h1>
+        <p class="sub">Aplikasi belum dihubungkan ke database Supabase.</p>
+        <div class="alert warn">Buka file <b>config.js</b>, isi <b>SUPABASE_URL</b> dan <b>SUPABASE_ANON_KEY</b>, lalu unggah ulang. Panduan lengkap ada di <b>PANDUAN.md</b>.</div>
+      </div>
+
+      <div class="auth-foot">© PT. Khidma Group Wisata</div>
+    </div>
+  </main>
+</div>
+
+<!-- ================= APLIKASI ================= -->
+<div id="appShell" class="hidden">
+  <header class="topbar">
+    <div class="topbar-in">
+      <div class="brand"><img src="assets/logo-emblem.png" alt="Khidma Tour"><div class="brand-t"><b>KHIDMA INVOICE</b><span>PT. Khidma Group Wisata</span></div></div>
+      <nav class="nav">
+        <button class="nav-btn active" data-nav="create">Buat Invoice</button>
+        <button class="nav-btn" data-nav="history">Riwayat</button>
+        <button class="icon-btn" id="openSettings" title="Pengaturan" aria-label="Pengaturan">⚙</button>
+        <button class="nav-btn out" id="logoutBtn" title="Keluar" aria-label="Keluar">Keluar</button>
+      </nav>
+    </div>
+  </header>
+
+  <main class="container">
+    <section class="view active" id="createView">
+      <div class="page-head">
+        <div><div class="eyebrow">Invoice generator</div><h1 class="title" id="pageTitle">Buat invoice baru</h1><p class="desc">Isi data, periksa pratinjau, lalu unduh sebagai PDF.</p></div>
+        <button class="btn btn-ghost" id="newInvoice" type="button">＋ Invoice Baru</button>
+      </div>
+
+      <div class="seg" id="seg"><button class="on" data-tab="form">Formulir</button><button data-tab="preview">Pratinjau</button></div>
+
+      <div class="workspace" id="workspace" data-tab="form">
+        <section class="panel form-panel">
+          <div class="panel-head"><div><div class="panel-title">Formulir invoice</div><div class="panel-sub">Kolom bertanda * wajib diisi</div></div><span class="live"><i></i> Sinkron online</span></div>
+          <div class="panel-body">
+            <form id="invForm" autocomplete="off" onsubmit="return false">
+              <div class="sec">Informasi invoice</div>
+              <div class="grid2">
+                <div class="field"><label for="fType">Jenis invoice *</label><select id="fType"><option value="UMR">Umroh</option><option value="HJI">Haji</option><option value="LAIN">Lainnya</option></select></div>
+                <div class="field"><label for="fDate">Tanggal invoice *</label><input id="fDate" type="date"></div>
+                <div class="field"><label>Nomor invoice</label><input id="fNumber" readonly></div>
+                <div class="field"><label for="fDeadline">Deadline pembayaran</label><input id="fDeadline" type="date"></div>
+                <div class="field full"><label for="fBill">Bill to / Nama pelanggan *</label><input id="fBill" placeholder="Nama jamaah / pelanggan" autocapitalize="characters"></div>
+                <div class="field full"><label for="fSubject">Hal</label><input id="fSubject" placeholder="Invoice Pembayaran"></div>
+                <div class="field full"><label for="fProgram">Program / Paket *</label><input id="fProgram" placeholder="Umroh Privat Akhir Tahun"></div>
+              </div>
+
+              <div class="divider"></div>
+              <div class="lh"><div class="sec">Rincian tagihan</div><button class="add" id="addItem" type="button">＋ Tambah baris</button></div>
+              <div id="itemsList"></div>
+
+              <div class="divider"></div>
+              <div class="lh"><div class="sec">Rincian pembayaran</div><button class="add" id="addPay" type="button">＋ Tambah pembayaran</button></div>
+              <div id="paysList"></div>
+              <div class="hint">Kolom “Desc” boleh dikosongkan — otomatis berisi DP, Payment 1…9, PELUNASAN seperti pada contoh.</div>
+
+              <div class="divider"></div>
+              <div class="totals">
+                <div class="tot"><small>Total tagihan</small><b id="tTotal">IDR 0</b></div>
+                <div class="tot"><small>Total bayar</small><b id="tPaid">IDR 0</b></div>
+                <div class="tot due"><small id="tDueL">Kurang bayar</small><b id="tDue">IDR 0</b></div>
+              </div>
+
+              <div class="actions">
+                <button class="btn btn-ghost" type="button" id="resetBtn">Bersihkan</button>
+                <button class="btn btn-ghost" type="button" id="saveBtn">Simpan</button>
+                <button class="btn btn-primary" type="button" id="savePdfBtn">Simpan &amp; Unduh PDF ⬇</button>
+              </div>
+            </form>
+          </div>
+        </section>
+
+        <section class="panel preview-panel">
+          <div class="panel-head"><div><div class="panel-title">Pratinjau invoice</div><div class="panel-sub">Sama persis dengan hasil PDF</div></div><span class="live"><i></i> Live</span></div>
+          <div class="preview-wrap"><div class="pv-box" id="pvBox"><div class="pv-scale" id="pvScale"><div class="pv-paper" id="pvPaper"></div></div></div></div>
+          <div class="panel-body" style="padding-top:16px"><div class="actions" style="margin-top:0"><button class="btn btn-primary" id="pdfBtn2" type="button">Simpan &amp; Unduh PDF ⬇</button><button class="btn btn-orange hidden" id="shareBtn" type="button">Bagikan ↗</button></div></div>
+        </section>
+      </div>
+    </section>
+
+    <section class="view" id="historyView">
+      <div class="page-head"><div><div class="eyebrow">Arsip dokumen</div><h1 class="title">Riwayat invoice</h1><p class="desc">Seluruh invoice tim — bisa dilihat dan dikoreksi bersama.</p></div><button class="btn btn-primary" id="newFromHist" type="button">＋ Buat Invoice</button></div>
+      <section class="panel"><div class="panel-head"><div><div class="panel-title">Invoice tersimpan</div><div class="panel-sub" id="hCount">0 dokumen</div></div><div style="display:flex;gap:8px"><button class="sb" id="refreshBtn" type="button">↻ Muat ulang</button><button class="sb" id="exportBtn" type="button">⬇ Cadangkan</button></div></div>
+        <div class="panel-body"><div class="toolbar"><input id="hSearch" type="search" placeholder="Cari nomor invoice, nama, atau program…"></div><div class="hlist" id="hList"></div></div></section>
+    </section>
+  </main>
+
+  <nav class="bnav">
+    <button data-nav="create" class="active"><span>✎</span>Buat</button>
+    <button data-nav="history"><span>▤</span>Riwayat</button>
+    <button id="bnSettings"><span>⚙</span>Pengaturan</button>
+    <!-- logout di Pengaturan pada layar kecil -->
+  </nav>
+</div>
+
+<!-- ================= PENGATURAN ================= -->
+<div class="mb" id="setModal" role="dialog" aria-modal="true">
+  <div class="modal">
+    <div class="mh"><div><div class="panel-title">Pengaturan</div><div class="panel-sub">Data perusahaan tampil pada setiap invoice</div></div><button class="icon-btn" id="setClose" aria-label="Tutup">×</button></div>
+    <div class="mbody">
+      <div class="alert warn hidden" id="adminNote">Pengaturan di bawah hanya dapat diubah oleh admin.</div>
+      <div class="setgrp" data-admin><h4>Perusahaan</h4>
+        <div class="field"><label>Nama perusahaan</label><input id="sCompany"></div>
+        <div class="field"><label>Alamat</label><textarea id="sAddress" rows="2"></textarea><div class="hint">Gunakan Enter untuk pindah baris.</div></div>
+        <div class="grid2"><div class="field"><label>Telepon</label><input id="sPhone" inputmode="tel"></div><div class="field"><label>Email</label><input id="sEmail" inputmode="email"></div></div>
+        <div class="field"><label>Logo di header invoice</label><input id="sLogoFile" type="file" accept="image/*"><div class="imgset"><img id="sLogoPrev" alt=""><span id="sLogoEmpty">Memakai logo Khidma Tour bawaan.</span><button class="sb" id="sLogoClr" type="button">Kembali ke bawaan</button></div></div>
+      </div>
+      <div class="setgrp" data-admin><h4>Rekening pembayaran</h4>
+        <div class="field"><label>Nama bank</label><input id="sBank" placeholder="Bank Mandiri"></div>
+        <div id="sAccs"></div>
+        <button class="add" id="sAddAcc" type="button">＋ Tambah rekening</button>
+      </div>
+      <div class="setgrp" data-admin><h4>Tanda tangan &amp; catatan</h4>
+        <div class="grid2"><div class="field"><label>Nama penanda tangan</label><input id="sSigner"></div><div class="field"><label>Kota penerbit</label><input id="sPlace"></div></div>
+        <div class="field"><label>Catatan invoice</label><textarea id="sNote" rows="2"></textarea></div>
+        <div class="field"><label>Gambar tanda tangan</label><input id="sSigFile" type="file" accept="image/*"><div class="imgset"><img id="sSigPrev" alt=""><span id="sSigEmpty">Memakai logo Khidma Tour bawaan.</span><button class="sb" id="sSigClr" type="button">Kembali ke bawaan</button></div></div>
+        <div class="field" style="margin:0"><label>Posisi tanda tangan</label><select id="sSigAlign"><option value="start">Kiri</option><option value="center">Tengah</option><option value="end">Kanan</option></select></div>
+      </div>
+      <div class="setgrp"><h4>Akun saya</h4>
+        <div class="hint" id="sWho" style="margin:0 0 12px"></div>
+        <div id="pwAlert" class="alert err hidden"></div>
+        <div class="field"><label>Password baru (min. 8 karakter)</label><input id="pwNew" type="password" autocomplete="new-password"></div>
+        <button class="btn btn-ghost" id="pwSave" type="button" style="min-height:42px">Ganti password</button>
+      </div>
+      <div class="setgrp hidden" id="importBox"><h4>Impor data lama</h4>
+        <p class="hint" style="margin:0 0 12px">Ditemukan invoice yang tersimpan di browser ini dari versi sebelumnya. Impor sekali ke database agar bisa dilihat seluruh tim.</p>
+        <button class="btn btn-orange" id="importBtn" type="button" style="min-height:42px">Impor ke database</button>
+      </div>
+      <div class="macts"><button class="btn btn-ghost" id="setLogout" type="button">Keluar</button><button class="btn btn-ghost" id="setCancel" type="button">Batal</button><button class="btn btn-primary" id="setSave" type="button">Simpan</button></div>
+    </div>
+  </div>
+</div>
+
+<div class="mb" id="pdfModal"><div class="modal pdfsheet"><div class="mh"><div><div class="panel-title">PDF siap</div><div class="panel-sub" id="pdfName"></div></div><button class="icon-btn" id="pdfClose" aria-label="Tutup">×</button></div>
+  <div class="mbody"><div class="alert ok">PDF berhasil dibuat. Jika unduhan tidak otomatis, gunakan tombol di bawah.</div>
+  <div class="actions" style="margin-top:0"><button class="btn btn-primary" id="pdfDl" type="button">Unduh PDF</button><button class="btn btn-ghost" id="pdfOpen" type="button">Buka PDF</button><button class="btn btn-orange hidden" id="pdfShare" type="button">Bagikan</button></div></div></div></div>
+
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<!-- Render offscreen untuk PDF -->
+<div id="pdfStage" style="position:fixed;left:-10000px;top:0;width:800px;pointer-events:none"></div>
+
+<script src="vendor/html2canvas.min.js"></script>
+<script src="vendor/jspdf.umd.min.js"></script>
+<script src="vendor/supabase.js"></script>
+<script src="config.js"></script>
+<script src="js/logo-data.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
