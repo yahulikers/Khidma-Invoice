@@ -10,7 +10,7 @@
 .inv-head{display:flex;align-items:center;height:88px;background:#f3f3f3;border-bottom:5px solid #5a5a5a}
 .inv-logo{width:60px;margin-left:31px;flex:none;display:flex;align-items:center;justify-content:center}
 .inv-logo img{height:80px;width:auto;display:block}
-.inv-co{flex:1;padding-left:48px;color:#3c78d8;font-weight:700;font-size:19px;letter-spacing:.01em;white-space:nowrap}
+.inv-co{flex:1;padding-left:48px;color:#3c78d8;font-weight:700;font-size:23px;letter-spacing:.01em;white-space:nowrap}
 .inv-ct{width:245px;flex:none;padding-right:31px;text-align:right;color:#444;font-size:9px;letter-spacing:.06em;line-height:20px;white-space:pre-line}
 .inv-meta{margin:25px 0 19px;display:grid;grid-template-columns:132px 1fr;font-size:12px;line-height:21px}
 .inv-meta .l{padding-left:3px}
