@@ -24,11 +24,17 @@ const CFG = window.KHIDMA_CONFIG || {};
 const configured = !!(window.supabase && CFG.SUPABASE_URL && CFG.SUPABASE_ANON_KEY && !/PASTE_/.test(CFG.SUPABASE_URL + CFG.SUPABASE_ANON_KEY));
 const sb = configured ? window.supabase.createClient(CFG.SUPABASE_URL, CFG.SUPABASE_ANON_KEY, { auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true } }) : null;
 const arrivedByRecovery = /type=recovery/.test(location.hash + location.search);
-let me = null, role = 'staff';
+let me = null, role = 'staff', perms = {}, profile = null;
 const isAdmin = () => role === 'admin';
+const can = p => isAdmin() || !!perms[p];                       // hak akses ditentukan admin per pengguna
+const LOGIN_DOMAIN = String(CFG.LOGIN_DOMAIN || 'khidma.app').toLowerCase();
+const toEmail = v => { v = String(v || '').trim(); return v.includes('@') ? v : v.toLowerCase() + '@' + LOGIN_DOMAIN; };   // User ID → email internal
+const uid = e => String(e || '').split('@')[0];
 function errMsg(e) {
   const m = String((e && e.message) || e || '');
-  if (/Invalid login/i.test(m)) return 'Email atau password salah.';
+  if (/Invalid login/i.test(m)) return 'User ID atau password salah.';
+  if (/banned|user is disabled/i.test(m)) return 'Akun Anda dinonaktifkan. Hubungi admin.';
+  if (/Failed to send a request|Function not found|FunctionsFetchError|NOT_FOUND/i.test(m)) return 'Fungsi admin-users belum dipasang di Supabase. Ikuti PANDUAN.md bagian "Pasang fungsi admin-users".';
   if (/not confirmed/i.test(m)) return 'Email belum dikonfirmasi. Hubungi admin.';
   if (/rate limit|too many|security purposes/i.test(m)) return 'Terlalu banyak percobaan. Coba lagi beberapa menit lagi.';
   if (/Failed to fetch|NetworkError|Load failed/i.test(m)) return 'Tidak ada koneksi internet.';
@@ -58,21 +64,13 @@ async function bootAuth() {
 $('loginForm').addEventListener('submit', async e => {
   e.preventDefault(); const btn = $('loginBtn'); btn.disabled = true; showAlert('loginAlert', '');
   try {
-    const { data, error } = await sb.auth.signInWithPassword({ email: $('lUser').value.trim(), password: $('lPass').value });
+    const { data, error } = await sb.auth.signInWithPassword({ email: toEmail($('lUser').value), password: $('lPass').value });
     if (error) throw error; $('lPass').value = ''; await enterApp(data.user);
   } catch (err) { showAlert('loginAlert', errMsg(err)); }
   btn.disabled = false;
 });
 $('toForgot').addEventListener('click', () => authPanel('forgotForm'));
 $('toLogin').addEventListener('click', () => authPanel('loginForm'));
-$('forgotForm').addEventListener('submit', async e => {
-  e.preventDefault(); const btn = e.submitter || $('forgotBtn'); btn.disabled = true;
-  try {
-    const { error } = await sb.auth.resetPasswordForEmail($('fEmail').value.trim(), { redirectTo: location.origin + location.pathname });
-    if (error) throw error; showAlert('forgotAlert', 'Jika email terdaftar, tautan reset password sudah dikirim. Periksa kotak masuk (dan spam).', 'ok');
-  } catch (err) { showAlert('forgotAlert', errMsg(err)); }
-  btn.disabled = false;
-});
 $('resetForm').addEventListener('submit', async e => {
   e.preventDefault(); const n = $('rPass').value;
   if (n.length < 8) return showAlert('resetAlert', 'Password minimal 8 karakter.');
@@ -85,7 +83,7 @@ $('resetForm').addEventListener('submit', async e => {
 /* ---------- settings ---------- */
 const DEF = {
   company: 'PT. KHIDMA GROUP WISATA', address: 'Jl. Lintas Selatan, Pracimantoro,\nGiritontro, Wonogiri.', phone: '081326984250', email: 'elanurismayahya.iw@gmail.com',
-  bankName: 'Bank Mandiri', accounts: [{ name: 'PT KHIDMA GROUP WISATA', number: '1380028269434' }, { name: 'IRFANI WAKHID', number: '1380022284322' }],
+  bankName: 'Bank Mandiri', accounts: [{ bank: 'Bank Mandiri', name: 'PT KHIDMA GROUP WISATA', number: '1380028269434' }, { bank: 'Bank Mandiri', name: 'IRFANI WAKHID', number: '1380022284322' }],
   signer: 'IRFANI WAKHID', place: 'Wonogiri', note: 'Harga Tersebut Tidak Mengikat, Mengikuti Regulasi Maskapai.',
   logoData: '', signatureData: '', signatureAlign: 'start'
 };
@@ -113,6 +111,9 @@ function invoiceHTML(d, st, number) {
   }
   const dueRow = c.due < 0 ? ['LEBIH BAYAR :', `<span>IDR</span><span>${num(-c.due)}</span>`, ''] : (c.due === 0 && c.total > 0) ? ['STATUS :', 'LUNAS', ' txt'] : ['KURANG BAYAR :', `<span>IDR</span><span>${num(c.due)}</span>`, ''];
   const accs = (st.accounts || []).filter(a => a.name || a.number);
+  const defBank = (st.bankName || 'Bank Mandiri').trim(), groups = [];            // kelompokkan rekening per bank
+  accs.forEach(a => { const b = String(a.bank || defBank).trim() || defBank; let g = groups.find(x => x.b.toLowerCase() === b.toLowerCase()); if (!g) { g = { b, list: [] }; groups.push(g); } g.list.push(a); });
+  const bankHTML = groups.map((g, gi) => `<div class="bk${gi ? ' gap' : ''}"><div class="r"><div class="n">${esc(g.b)}</div><div class="h">No. REK</div></div>${g.list.map(a => `<div class="r"><div class="n">a.n ${esc(a.name)}</div><div>: ${esc(a.number)}</div></div>`).join('')}</div>`).join('');
   const al = ['start', 'center', 'end'].includes(st.signatureAlign) ? st.signatureAlign : 'start';
   const logo = st.logoData || window.KHIDMA_LOGO, sig = st.signatureData || window.KHIDMA_LOGO;
   const place = dLong(d.invoiceDate || todayISO());
@@ -123,7 +124,7 @@ function invoiceHTML(d, st, number) {
 <thead><tr><th>DATE OF TRAVEL</th><th class="c2">DESCRIPTION</th><th>QTY</th><th class="c4">PRICE</th><th>TOTAL</th></tr></thead><tbody>${it}</tbody></table>
 <div class="inv-bottom">
 <div class="inv-left"><div class="inv-cap">Payment dapat dibayarkan ke :</div>
-<div class="inv-bank"><div class="r"><div class="n">${esc(st.bankName)}</div><div class="h">No. REK</div></div>${accs.map(a => `<div class="r"><div class="n">a.n ${esc(a.name)}</div><div>: ${esc(a.number)}</div></div>`).join('')}</div>
+<div class="inv-bank">${bankHTML}</div>
 <div class="inv-note">Note : ${esc(st.note)}</div>
 <div class="inv-sign ${al === 'start' ? '' : al}"><div>${esc(st.place)}, ${esc(place)}</div><img src="${sig}" alt=""><div class="sn">${esc(st.signer)}</div></div></div>
 <div class="inv-right"><div class="inv-tot"><span class="lb">TOTAL TAGIHAN :</span><span class="mm"><span>IDR</span><span>${num(c.total)}</span></span></div>
@@ -195,6 +196,8 @@ function snapshotSettings() { const s = clone(settings); delete s.logoData; dele
 const mapRow = r => ({ id: r.id, number: r.number, createdAt: r.created_at, updatedAt: r.updated_at, createdBy: r.created_by_email, updatedBy: r.updated_by_email, data: r.data, settings: r.settings, calc: calc(r.data) });
 async function saveInvoice() {
   if (saving || !validate()) return null;
+  if (!curId && !can('create')) { toast('Anda tidak punya izin membuat invoice baru.'); return null; }
+  if (curId && !can('edit')) { toast('Anda tidak punya izin mengoreksi invoice.'); return null; }
   saving = true; document.body.style.cursor = 'progress';
   const d = read(), c = calc(d);
   const row = { type: d.type, invoice_date: d.invoiceDate || null, bill_to: d.billTo, program: d.program, total: c.total, paid: c.paid, status: c.status, data: d, settings: snapshotSettings() };
@@ -222,7 +225,7 @@ function openInvoice(rec) {
   $('fType').value = d.type || 'UMR'; $('fDate').value = d.invoiceDate || todayISO(); $('fDeadline').value = d.deadline || ''; $('fBill').value = d.billTo || ''; $('fSubject').value = d.subject || ''; $('fProgram').value = d.program || '';
   $('itemsList').innerHTML = ''; $('paysList').innerHTML = '';
   (d.items.length ? d.items : [{}]).forEach(addItem); (d.payments.length ? d.payments : [{}]).forEach(addPay);
-  $('pageTitle').textContent = 'Edit ' + rec.number; update(); setView('create'); toast('Dimuat' + (rec.updatedBy ? ' · terakhir diubah oleh ' + rec.updatedBy : '') + '.');
+  $('pageTitle').textContent = 'Edit ' + rec.number; update(); setView('create'); toast('Dimuat' + (rec.updatedBy ? ' · terakhir diubah oleh ' + uid(rec.updatedBy) : '') + '.');
 }
 
 /* ---------- PDF ---------- */
@@ -274,9 +277,9 @@ function renderHist() {
   if (!f.length) { $('hList').innerHTML = `<div class="empty"><div class="ic">▤</div><b>${all.length ? 'Invoice tidak ditemukan' : (histLoading ? 'Memuat…' : 'Belum ada invoice')}</b><div style="font-size:12px;margin-top:6px">${all.length ? 'Coba kata kunci lain.' : 'Invoice yang disimpan akan muncul di sini untuk seluruh tim.'}</div></div>`; return; }
   $('hList').innerHTML = f.map(i => {
     const c = i.calc, s = c.status === 'paid' ? ['LUNAS', 'paid'] : c.status === 'over' ? ['LEBIH BAYAR', 'over'] : ['BELUM LUNAS', 'unpaid'];
-    const who = i.updatedBy && i.updatedBy !== i.createdBy ? `dibuat ${esc(i.createdBy || '—')} · diubah ${esc(i.updatedBy)} ${esc(ago(i.updatedAt))}` : `oleh ${esc(i.createdBy || '—')} · ${esc(ago(i.updatedAt))}`;
+    const who = i.updatedBy && i.updatedBy !== i.createdBy ? `dibuat ${esc(uid(i.createdBy) || '—')} · diubah ${esc(uid(i.updatedBy))} ${esc(ago(i.updatedAt))}` : `oleh ${esc(uid(i.createdBy) || '—')} · ${esc(ago(i.updatedAt))}`;
     return `<div class="hcard"><div><div class="hno">${esc(i.number)}</div><div class="hname">${esc(i.data?.billTo || 'Tanpa nama')}</div><div class="hmeta">${esc(i.data?.program || '—')} · ${esc(dShort(i.data?.invoiceDate))}</div><div class="hmeta">${who}</div></div>
-<div class="hright"><div><div class="hamt">${idr(c.total)}</div><span class="st ${s[1]}">${s[0]}</span></div><div class="hact"><button class="sb" data-a="open" data-id="${esc(i.id)}">Buka</button><button class="sb" data-a="pdf" data-id="${esc(i.id)}">PDF</button>${isAdmin() ? `<button class="sb del" data-a="del" data-id="${esc(i.id)}" aria-label="Hapus">✕</button>` : ''}</div></div></div>`;
+<div class="hright"><div><div class="hamt">${idr(c.total)}</div><span class="st ${s[1]}">${s[0]}</span></div><div class="hact"><button class="sb" data-a="open" data-id="${esc(i.id)}">Buka</button><button class="sb" data-a="pdf" data-id="${esc(i.id)}">PDF</button>${can('delete') ? `<button class="sb del" data-a="del" data-id="${esc(i.id)}" aria-label="Hapus">✕</button>` : ''}</div></div></div>`;
   }).join('');
 }
 async function refreshHist(quiet) {
@@ -293,7 +296,7 @@ $('hList').addEventListener('click', async e => {
   if (b.dataset.a === 'pdf') makePdf(rec.data, { ...settings, ...rec.settings, logoData: settings.logoData, signatureData: settings.signatureData }, rec.number);
   if (b.dataset.a === 'del' && confirm(`Hapus ${rec.number} untuk SELURUH tim? Tindakan ini tidak bisa dibatalkan.`)) {
     const { data, error } = await sb.from('invoices').delete().eq('id', rec.id).select();
-    if (error) return toast('Gagal menghapus: ' + errMsg(error)); if (!data.length) return toast('Hanya admin yang dapat menghapus invoice.');
+    if (error) return toast('Gagal menghapus: ' + errMsg(error)); if (!data.length) return toast('Anda tidak punya izin menghapus invoice.');
     if (curId === rec.id) { curId = null; curNo = null; curUpdated = null; }
     await refreshHist(true); toast('Invoice dihapus.');
   }
@@ -304,18 +307,18 @@ document.addEventListener('visibilitychange', () => { if (!document.hidden && me
 
 /* ---------- settings modal ---------- */
 let pAccs = [], pLogo = '', pSig = '';
-function readAccs() { return [...$('sAccs').children].map(r => ({ name: r.querySelector('.an').value.trim(), number: r.querySelector('.ac').value.trim() })); }
+function readAccs() { return [...$('sAccs').children].map(r => ({ bank: r.querySelector('.ab').value.trim(), name: r.querySelector('.an').value.trim(), number: r.querySelector('.ac').value.trim() })); }
 function drawAccs() {
-  $('sAccs').innerHTML = pAccs.map((a, i) => `<div class="acc"><div class="field"><label>Atas nama</label><input class="an" value="${esc(a.name)}"></div><div class="field"><label>No. rekening</label><input class="ac" inputmode="numeric" value="${esc(a.number)}"></div><button class="x" type="button" data-i="${i}">Hapus</button></div>`).join('');
+  $('sAccs').innerHTML = pAccs.map((a, i) => `<div class="acc"><div class="field bk"><label>Nama bank</label><input class="ab" list="bankList" placeholder="Contoh: Bank BCA" value="${esc(a.bank || '')}"></div><div class="field"><label>Atas nama</label><input class="an" value="${esc(a.name)}"></div><div class="field"><label>No. rekening</label><input class="ac" inputmode="numeric" value="${esc(a.number)}"></div><button class="x" type="button" data-i="${i}">Hapus</button></div>`).join('');
 }
 function prevImg(k, url) { const im = $(k === 'l' ? 'sLogoPrev' : 'sSigPrev'), em = $(k === 'l' ? 'sLogoEmpty' : 'sSigEmpty'); if (url) { im.src = url; im.style.display = 'block'; em.style.display = 'none'; } else { im.removeAttribute('src'); im.style.display = 'none'; em.style.display = 'inline'; } }
 function openSet() {
-  $('sCompany').value = settings.company; $('sAddress').value = settings.address; $('sPhone').value = settings.phone; $('sEmail').value = settings.email; $('sBank').value = settings.bankName;
+  $('sCompany').value = settings.company; $('sAddress').value = settings.address; $('sPhone').value = settings.phone; $('sEmail').value = settings.email;
   pAccs = clone(settings.accounts); drawAccs(); $('sSigner').value = settings.signer; $('sPlace').value = settings.place; $('sNote').value = settings.note; $('sSigAlign').value = settings.signatureAlign || 'start';
   pLogo = settings.logoData || ''; pSig = settings.signatureData || ''; prevImg('l', pLogo); prevImg('s', pSig); $('sLogoFile').value = ''; $('sSigFile').value = '';
-  $('pwNew').value = ''; showAlert('pwAlert', ''); $('sWho').textContent = `${me ? me.email : ''} · ${isAdmin() ? 'Admin' : 'Staf'}`;
-  document.querySelectorAll('#setModal [data-admin]').forEach(g => g.querySelectorAll('input,textarea,select,button').forEach(x => { x.disabled = !isAdmin(); }));
-  $('adminNote').classList.toggle('hidden', isAdmin()); $('setSave').classList.toggle('hidden', !isAdmin());
+  $('pwNew').value = ''; showAlert('pwAlert', ''); $('sWho').textContent = `${profile && profile.user_id ? profile.user_id : uid(me && me.email)}${profile && profile.full_name ? ' (' + profile.full_name + ')' : ''} · ${isAdmin() ? 'Admin' : 'Staf'}`;
+  document.querySelectorAll('#setModal [data-admin]').forEach(g => g.querySelectorAll('input,textarea,select,button').forEach(x => { x.disabled = !can('settings'); }));
+  $('adminNote').classList.toggle('hidden', can('settings')); $('setSave').classList.toggle('hidden', !can('settings'));
   $('importBox').classList.toggle('hidden', !(isAdmin() && legacyInvoices().length)); $('setModal').classList.add('open');
 }
 const closeSet = () => $('setModal').classList.remove('open');
@@ -330,11 +333,11 @@ function compress(file, mw, mh) {
 async function upload(k, f) { if (!f) return; try { const d = await compress(f, k === 'l' ? 800 : 900, k === 'l' ? 800 : 400); if (k === 'l') pLogo = d; else pSig = d; prevImg(k, d); toast('Gambar dimuat. Klik Simpan.'); } catch (e) { toast(e.message); } }
 $('sLogoFile').addEventListener('change', e => upload('l', e.target.files[0])); $('sSigFile').addEventListener('change', e => upload('s', e.target.files[0]));
 $('sLogoClr').addEventListener('click', () => { pLogo = ''; prevImg('l', ''); $('sLogoFile').value = ''; }); $('sSigClr').addEventListener('click', () => { pSig = ''; prevImg('s', ''); $('sSigFile').value = ''; });
-$('sAddAcc').addEventListener('click', () => { pAccs = readAccs(); pAccs.push({ name: '', number: '' }); drawAccs(); });
+$('sAddAcc').addEventListener('click', () => { pAccs = readAccs(); pAccs.push({ bank: (pAccs[pAccs.length - 1] || {}).bank || '', name: '', number: '' }); drawAccs(); });
 $('sAccs').addEventListener('click', e => { const b = e.target.closest('.x'); if (!b) return; pAccs = readAccs(); pAccs.splice(+b.dataset.i, 1); drawAccs(); });
 $('setSave').addEventListener('click', async () => {
-  if (!isAdmin()) return toast('Hanya admin yang dapat mengubah pengaturan.');
-  const next = { company: $('sCompany').value.trim() || DEF.company, address: $('sAddress').value.trim(), phone: $('sPhone').value.trim(), email: $('sEmail').value.trim(), bankName: $('sBank').value.trim() || DEF.bankName, accounts: readAccs().filter(a => a.name || a.number), signer: $('sSigner').value.trim(), place: $('sPlace').value.trim(), note: $('sNote').value.trim(), logoData: pLogo, signatureData: pSig, signatureAlign: $('sSigAlign').value };
+  if (!can('settings')) return toast('Anda tidak punya izin mengubah pengaturan.');
+  const next = { company: $('sCompany').value.trim() || DEF.company, address: $('sAddress').value.trim(), phone: $('sPhone').value.trim(), email: $('sEmail').value.trim(), bankName: settings.bankName || DEF.bankName, accounts: readAccs().filter(a => a.name || a.number), signer: $('sSigner').value.trim(), place: $('sPlace').value.trim(), note: $('sNote').value.trim(), logoData: pLogo, signatureData: pSig, signatureAlign: $('sSigAlign').value };
   const { error } = await sb.from('app_settings').upsert({ id: 1, data: next });
   if (error) return toast('Gagal menyimpan: ' + errMsg(error));
   settings = next; update(); closeSet(); toast('Pengaturan disimpan untuk seluruh tim.');
@@ -359,7 +362,7 @@ $('importBtn').addEventListener('click', async () => {
   }
   for (const k in max) await sb.rpc('bump_counter', { p_key: k, p_last: max[k] });
   const old = L(K.set, null); if (old && old.company && confirm('Pakai juga pengaturan perusahaan (rekening, logo, dll.) dari perangkat ini sebagai pengaturan tim?')) {
-    const next = { ...clone(DEF), ...old }; const { error } = await sb.from('app_settings').upsert({ id: 1, data: next }); if (!error) { settings = next; update(); }
+    const next = normSettings({ ...clone(DEF), ...old }); const { error } = await sb.from('app_settings').upsert({ id: 1, data: next }); if (!error) { settings = next; update(); }
   }
   $('importBtn').disabled = false; await refreshHist(true);
   toast(`Impor selesai: ${ok} berhasil, ${dup} dilewati (nomor sudah ada)${fail ? ', ' + fail + ' gagal' : ''}.`);
@@ -368,11 +371,78 @@ $('importBtn').addEventListener('click', async () => {
 $('openSettings').addEventListener('click', openSet); $('bnSettings').addEventListener('click', openSet);
 $('setLogout').addEventListener('click', logout); $('logoutBtn').addEventListener('click', () => { if (confirm('Keluar dari aplikasi?')) logout(); });
 
+
+/* ---------- pengguna (khusus admin) ---------- */
+async function callAdmin(body) {
+  const { data, error } = await sb.functions.invoke('admin-users', { body });
+  if (error) { let msg = error.message; try { const j = await error.context.json(); if (j && j.error) msg = j.error; } catch (e) { } throw new Error(msg); }
+  if (data && data.error) throw new Error(data.error); return data;
+}
+let usersCache = [];
+const PERM_LBL = { create: 'Buat invoice', edit: 'Koreksi invoice', delete: 'Hapus invoice', settings: 'Ubah pengaturan' };
+async function loadUsers() {
+  $('uList').innerHTML = '<div class="empty"><b>Memuat…</b></div>';
+  try { usersCache = (await callAdmin({ action: 'list' })).users || []; renderUsers(); }
+  catch (e) { $('uList').innerHTML = `<div class="alert err">${esc(errMsg(e))}</div>`; }
+}
+function renderUsers() {
+  $('uCount').textContent = `${usersCache.length} pengguna`;
+  $('uList').innerHTML = usersCache.map(u => {
+    const chips = u.role === 'admin' ? '<span class="chip on">Semua hak akses</span>' : Object.keys(PERM_LBL).map(k => `<span class="chip ${u.perms && u.perms[k] ? 'on' : ''}">${u.perms && u.perms[k] ? '✓' : '✕'} ${PERM_LBL[k]}</span>`).join('');
+    return `<div class="hcard ${u.active ? '' : 'off'}"><div class="hmain"><div class="hno">${esc(u.user_id)} ${u.id === me.id ? '<span class="st paid">Anda</span>' : ''}${u.active ? '' : ' <span class="st over">NONAKTIF</span>'}</div><div class="hname">${esc(u.full_name || '—')}</div><div class="hmeta"><span class="st ${u.role === 'admin' ? 'paid' : 'unpaid'}" style="margin:0">${u.role === 'admin' ? 'ADMIN' : 'STAF'}</span></div><div class="chips">${chips}</div></div><div class="hright"><div class="hact"><button class="sb" data-u="${esc(u.id)}">Atur</button></div></div></div>`;
+  }).join('') || '<div class="empty"><b>Belum ada pengguna</b></div>';
+}
+const genPw = () => { const al = 'abcdefghjkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789'; const r = new Uint8Array(10); crypto.getRandomValues(r); return [...r].map(x => al[x % al.length]).join(''); };
+let editingUser = null;
+function permBoxes(on) { ['Create', 'Edit', 'Delete', 'Settings'].forEach(k => { $('up' + k).disabled = on; if (on) $('up' + k).checked = true; }); }
+function openUser(u) {
+  editingUser = u || null; const isNew = !u, self = u && u.id === me.id;
+  $('uTitle').textContent = isNew ? 'Tambah pengguna' : 'Atur pengguna: ' + u.user_id; showAlert('uAlert', '');
+  $('uId').value = isNew ? '' : u.user_id; $('uId').disabled = !isNew; $('uName').value = isNew ? '' : (u.full_name || '');
+  $('uPass').value = isNew ? genPw() : ''; $('uPassLbl').textContent = isNew ? 'Password awal (catat & berikan ke pengguna)' : 'Reset password (kosongkan jika tidak diubah)';
+  $('uRole').value = isNew ? 'staff' : u.role; $('uRole').disabled = !!self;
+  const pr = isNew ? { create: true, edit: true, delete: false, settings: false } : (u.perms || {});
+  $('upCreate').checked = !!pr.create; $('upEdit').checked = !!pr.edit; $('upDelete').checked = !!pr.delete; $('upSettings').checked = !!pr.settings;
+  permBoxes($('uRole').value === 'admin');
+  $('uActive').checked = isNew ? true : u.active; $('uActiveBox').classList.toggle('hidden', isNew || !!self);
+  $('uDelete').classList.toggle('hidden', isNew || !!self); $('uModal').classList.add('open');
+}
+$('uRole').addEventListener('change', () => permBoxes($('uRole').value === 'admin'));
+$('uGen').addEventListener('click', () => { $('uPass').value = genPw(); });
+$('uAdd').addEventListener('click', () => openUser(null));
+$('uList').addEventListener('click', e => { const b = e.target.closest('[data-u]'); if (b) openUser(usersCache.find(x => x.id === b.dataset.u)); });
+$('uClose').addEventListener('click', () => $('uModal').classList.remove('open')); $('uCancel').addEventListener('click', () => $('uModal').classList.remove('open'));
+$('uSave').addEventListener('click', async () => {
+  const permObj = { create: $('upCreate').checked, edit: $('upEdit').checked, delete: $('upDelete').checked, settings: $('upSettings').checked };
+  const btn = $('uSave'); btn.disabled = true; showAlert('uAlert', '');
+  try {
+    if (!editingUser) {
+      const idv = $('uId').value.trim().toLowerCase();
+      if (!/^[a-z0-9][a-z0-9._-]{2,29}$/.test(idv)) throw new Error('User ID 3–30 karakter: huruf kecil, angka, titik, strip, atau garis bawah (tanpa spasi).');
+      if ($('uPass').value.length < 8) throw new Error('Password minimal 8 karakter.');
+      await callAdmin({ action: 'create', user_id: $('uId').value.trim().toLowerCase(), full_name: $('uName').value.trim(), password: $('uPass').value, role: $('uRole').value, perms: permObj });
+      toast('Pengguna dibuat. Berikan User ID & password ke yang bersangkutan.');
+    } else {
+      const self = editingUser.id === me.id;
+      await callAdmin({ action: 'update', id: editingUser.id, full_name: $('uName').value.trim(), ...(self ? {} : { role: $('uRole').value, active: $('uActive').checked }), perms: permObj });
+      if ($('uPass').value) await callAdmin({ action: 'reset_password', id: editingUser.id, password: $('uPass').value });
+      toast('Perubahan disimpan.');
+    }
+    $('uModal').classList.remove('open'); await loadUsers();
+  } catch (e) { showAlert('uAlert', errMsg(e)); }
+  btn.disabled = false;
+});
+$('uDelete').addEventListener('click', async () => {
+  if (!editingUser || !confirm(`Hapus pengguna ${editingUser.user_id}? Invoice buatannya tetap ada.`)) return;
+  try { await callAdmin({ action: 'delete', id: editingUser.id }); $('uModal').classList.remove('open'); toast('Pengguna dihapus.'); await loadUsers(); } catch (e) { showAlert('uAlert', errMsg(e)); }
+});
+
 /* ---------- navigasi ---------- */
 function setView(v) {
-  $('createView').classList.toggle('active', v === 'create'); $('historyView').classList.toggle('active', v === 'history');
+  if (v === 'users' && !isAdmin()) v = 'create';
+  $('createView').classList.toggle('active', v === 'create'); $('historyView').classList.toggle('active', v === 'history'); $('usersView').classList.toggle('active', v === 'users');
   document.querySelectorAll('[data-nav]').forEach(b => b.classList.toggle('active', b.dataset.nav === v));
-  if (v === 'history') refreshHist(true); window.scrollTo({ top: 0 }); if (v === 'create') requestAnimationFrame(fit);
+  if (v === 'history') refreshHist(true); if (v === 'users') loadUsers(); window.scrollTo({ top: 0 }); if (v === 'create') requestAnimationFrame(fit);
 }
 document.querySelectorAll('[data-nav]').forEach(b => b.addEventListener('click', () => setView(b.dataset.nav)));
 function setTab(t) { $('workspace').dataset.tab = t; document.querySelectorAll('#seg button').forEach(b => b.classList.toggle('on', b.dataset.tab === t)); window.scrollTo({ top: 0 }); requestAnimationFrame(fit); }
@@ -392,20 +462,33 @@ $('hSearch').addEventListener('input', renderHist);
 $('invForm').addEventListener('input', update);
 window.addEventListener('resize', fit);
 
+function normSettings(st) {
+  if (!Array.isArray(st.accounts)) st.accounts = clone(DEF.accounts);
+  const fb = st.bankName || 'Bank Mandiri'; st.accounts = st.accounts.map(a => ({ ...a, bank: a.bank || fb })); return st;
+}
 let appStarted = false;
 async function loadProfile() {
-  const { data, error } = await sb.from('profiles').select('role').eq('id', me.id).maybeSingle(); if (error) throw error;
-  role = data && data.role === 'admin' ? 'admin' : 'staff';
+  const { data, error } = await sb.from('profiles').select('role,perms,active,full_name,user_id').eq('id', me.id).maybeSingle(); if (error) throw error;
+  profile = data; role = data && data.role === 'admin' ? 'admin' : 'staff'; perms = (data && data.perms) || {};
 }
 async function loadSettings() {
   const { data, error } = await sb.from('app_settings').select('data').eq('id', 1).maybeSingle(); if (error) throw error;
   if (!data && isAdmin()) await sb.from('app_settings').upsert({ id: 1, data: clone(DEF) });   // admin pertama: isi default
-  settings = { ...clone(DEF), ...((data && data.data) || {}) };
-  if (!Array.isArray(settings.accounts)) settings.accounts = clone(DEF.accounts);
+  settings = normSettings({ ...clone(DEF), ...((data && data.data) || {}) });
+}
+function applyPerms() {
+  const w = can('create') || can('edit');
+  ['saveBtn', 'savePdfBtn', 'pdfBtn2'].forEach(i => $(i).classList.toggle('hidden', !w));
+  $('newInvoice').classList.toggle('hidden', !can('create')); $('newFromHist').classList.toggle('hidden', !can('create'));
+  document.querySelectorAll('[data-nav=users]').forEach(b => b.classList.toggle('hidden', !isAdmin()));
+  $('bnav').style.gridTemplateColumns = `repeat(${isAdmin() ? 4 : 3},1fr)`;
 }
 async function enterApp(user) {
   me = user;
-  try { await loadProfile(); await loadSettings(); } catch (e) { console.error(e); toast(errMsg(e)); }
+  try { await loadProfile(); } catch (e) { console.error(e); toast(errMsg(e)); }
+  if (profile && profile.active === false) { try { await sb.auth.signOut(); } catch (e) { } me = null; showAuth('loginForm'); return showAlert('loginAlert', 'Akun Anda dinonaktifkan. Hubungi admin.'); }
+  try { await loadSettings(); } catch (e) { console.error(e); toast(errMsg(e)); }
+  applyPerms();
   $('authScreen').classList.add('hidden'); $('appShell').classList.remove('hidden');
   if (!appStarted) { appStarted = true; resetForm(); }
   requestAnimationFrame(() => { update(); fit(); });
