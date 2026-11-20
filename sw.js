@@ -1,4 +1,4 @@
-const V = 'khidma-invoice-v3b';
+const V = 'khidma-invoice-v3c';
 const FILES = ['./','index.html','manifest.webmanifest','css/app.css','css/invoice.css','js/app.js','js/logo-data.js','config.js','vendor/supabase.js','vendor/html2canvas.min.js','vendor/jspdf.umd.min.js',
 'assets/logo.png','assets/logo-emblem.png','assets/icon-192.png','assets/icon-512.png','assets/apple-touch-icon.png','assets/favicon.png',
 'fonts/dejavu-sans.woff2','fonts/dejavu-sans-bold.woff2','fonts/dejavu-sans-oblique.woff2','fonts/liberation-sans.woff2','fonts/liberation-sans-bold.woff2',

@@ -96,7 +96,7 @@ const DEF = {
 };
 let settings = clone(DEF); // dimuat dari database setelah login
 const LOGO = () => settings.logoData || window.KHIDMA_LOGO;
-const SIG = () => settings.signatureData || window.KHIDMA_LOGO;
+const SIG = () => settings.signatureData || window.KHIDMA_SIG;
 
 /* ---------- invoice html ---------- */
 const PAYLBL = i => i === 0 ? 'DP' : i === 10 ? 'PELUNASAN' : i < 10 ? 'Payment ' + i : '';
@@ -122,7 +122,7 @@ function invoiceHTML(d, st, number) {
   accs.forEach(a => { const b = String(a.bank || defBank).trim() || defBank; let g = groups.find(x => x.b.toLowerCase() === b.toLowerCase()); if (!g) { g = { b, list: [] }; groups.push(g); } g.list.push(a); });
   const bankHTML = groups.map((g, gi) => `<div class="bk${gi ? ' gap' : ''}"><div class="r"><div class="n">${esc(g.b)}</div><div class="h">No. REK</div></div>${g.list.map(a => `<div class="r"><div class="n">a.n ${esc(a.name)}</div><div>: ${esc(a.number)}</div></div>`).join('')}</div>`).join('');
   const al = ['start', 'center', 'end'].includes(st.signatureAlign) ? st.signatureAlign : 'start';
-  const logo = st.logoData || window.KHIDMA_LOGO, sig = st.signatureData || window.KHIDMA_LOGO;
+  const logo = st.logoData || window.KHIDMA_LOGO, sig = st.signatureData || window.KHIDMA_SIG;
   const place = dLong(d.invoiceDate || todayISO());
   return `<div class="inv">
 <div class="inv-head"><div class="inv-logo"><img src="${logo}" alt=""></div><div class="inv-co">${esc(st.company)}</div><div class="inv-ct">${esc([st.address, st.phone, st.email].filter(Boolean).join('\n'))}</div></div>
