@@ -34,7 +34,7 @@ function errMsg(e) {
   const m = String((e && e.message) || e || '');
   if (/Invalid login/i.test(m)) return 'User ID atau password salah.';
   if (/banned|user is disabled/i.test(m)) return 'Akun Anda dinonaktifkan. Hubungi admin.';
-  if (/Failed to send a request|Function not found|FunctionsFetchError|NOT_FOUND/i.test(m)) return 'Fungsi admin-users belum dipasang di Supabase. Ikuti PANDUAN.md bagian "Pasang fungsi admin-users".';
+  if (/Requested function was not found|Failed to send a request to the Edge Function|FunctionsFetchError/.test(m)) return 'Fungsi admin-users belum dipasang di Supabase. Ikuti PANDUAN.md bagian "Pasang fungsi admin-users".';
   if (/not confirmed/i.test(m)) return 'Email belum dikonfirmasi. Hubungi admin.';
   if (/rate limit|too many|security purposes/i.test(m)) return 'Terlalu banyak percobaan. Coba lagi beberapa menit lagi.';
   if (/Failed to fetch|NetworkError|Load failed/i.test(m)) return 'Tidak ada koneksi internet.';
@@ -46,7 +46,14 @@ function errMsg(e) {
 function showAlert(id, msg, cls) { const e = $(id); e.textContent = msg; e.className = 'alert ' + (cls || 'err') + (msg ? '' : ' hidden'); }
 function authPanel(which) { ['loginForm', 'forgotForm', 'resetForm', 'configMissing'].forEach(i => $(i).classList.toggle('hidden', i !== which)); }
 function showAuth(which) { $('authScreen').classList.remove('hidden'); $('appShell').classList.add('hidden'); authPanel(which); }
-async function logout() { me = null; try { await sb.auth.signOut(); } catch (e) { } location.reload(); }
+async function logout() {
+  me = null;
+  // 1) minta server mencabut sesi (maks. 3 detik), 2) APAPUN hasilnya hapus sesi yang tersimpan di browser
+  try { await Promise.race([sb.auth.signOut(), new Promise(r => setTimeout(r, 3000))]); } catch (e) { }
+  try { Object.keys(localStorage).filter(k => /^sb-.*-auth-token/.test(k)).forEach(k => localStorage.removeItem(k)); } catch (e) { }
+  try { Object.keys(sessionStorage).filter(k => /^sb-.*-auth-token/.test(k)).forEach(k => sessionStorage.removeItem(k)); } catch (e) { }
+  location.reload();
+}
 
 async function bootAuth() {
   document.querySelectorAll('[data-eye]').forEach(b => b.addEventListener('click', () => { const i = $(b.dataset.eye); const show = i.type === 'password'; i.type = show ? 'text' : 'password'; b.textContent = show ? 'Tutup' : 'Lihat'; }));
@@ -373,8 +380,11 @@ $('setLogout').addEventListener('click', logout); $('logoutBtn').addEventListene
 
 
 /* ---------- pengguna (khusus admin) ---------- */
-async function callAdmin(body) {
+async function callAdmin(body, retry = true) {
   const { data, error } = await sb.functions.invoke('admin-users', { body });
+  if (error && retry && error.context && error.context.status === 401) {     // sesi kedaluwarsa? perbarui sesi lalu coba sekali lagi
+    const r = await sb.auth.refreshSession(); if (!r.error) return callAdmin(body, false);
+  }
   if (error) { let msg = error.message; try { const j = await error.context.json(); if (j && j.error) msg = j.error; } catch (e) { } throw new Error(msg); }
   if (data && data.error) throw new Error(data.error); return data;
 }
