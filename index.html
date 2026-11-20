@@ -34,21 +34,19 @@
         <h1>Masuk</h1>
         <p class="sub">Silakan login untuk mengakses aplikasi invoice.</p>
         <div id="loginAlert" class="alert err hidden"></div>
-        <div class="field"><label for="lUser">Email</label><input id="lUser" name="email" type="email" autocomplete="username" autocapitalize="none" inputmode="email" required></div>
+        <div class="field"><label for="lUser">User ID</label><input id="lUser" name="username" type="text" autocomplete="username" autocapitalize="none" autocorrect="off" spellcheck="false" placeholder="contoh: admin" required></div>
         <div class="field"><label for="lPass">Password</label><div class="pw"><input id="lPass" name="password" type="password" autocomplete="current-password" required><button type="button" class="eye" data-eye="lPass">Lihat</button></div></div>
         <button class="btn btn-primary btn-block" id="loginBtn" type="submit" style="margin-top:14px">Masuk</button>
         <div style="text-align:center;margin-top:10px"><button type="button" class="link" id="toForgot">Lupa password?</button></div>
       </form>
 
       <!-- Lupa password -->
-      <form id="forgotForm" class="hidden">
-        <h1>Reset Password</h1>
-        <p class="sub">Masukkan email akun Anda. Kami kirim tautan untuk membuat password baru.</p>
-        <div id="forgotAlert" class="alert err hidden"></div>
-        <div class="field"><label for="fEmail">Email</label><input id="fEmail" type="email" autocomplete="email" inputmode="email" required></div>
-        <button class="btn btn-primary btn-block" id="forgotBtn" type="submit">Kirim tautan reset</button>
-        <div style="text-align:center;margin-top:10px"><button type="button" class="link" id="toLogin">← Kembali ke login</button></div>
-      </form>
+      <div id="forgotForm" class="hidden">
+        <h1>Lupa Password?</h1>
+        <p class="sub">Password direset oleh admin.</p>
+        <div class="alert warn">Hubungi admin aplikasi. Admin dapat membuatkan password baru dari menu <b>Pengguna → Atur</b>, lalu memberikannya kepada Anda.</div>
+        <button type="button" class="btn btn-ghost btn-block" id="toLogin">← Kembali ke login</button>
+      </div>
 
       <!-- Password baru (dari tautan email) -->
       <form id="resetForm" class="hidden">
@@ -79,6 +77,7 @@
       <nav class="nav">
         <button class="nav-btn active" data-nav="create">Buat Invoice</button>
         <button class="nav-btn" data-nav="history">Riwayat</button>
+        <button class="nav-btn hidden" data-nav="users">Pengguna</button>
         <button class="icon-btn" id="openSettings" title="Pengaturan" aria-label="Pengaturan">⚙</button>
         <button class="nav-btn out" id="logoutBtn" title="Keluar" aria-label="Keluar">Keluar</button>
       </nav>
@@ -148,11 +147,17 @@
       <section class="panel"><div class="panel-head"><div><div class="panel-title">Invoice tersimpan</div><div class="panel-sub" id="hCount">0 dokumen</div></div><div style="display:flex;gap:8px"><button class="sb" id="refreshBtn" type="button">↻ Muat ulang</button><button class="sb" id="exportBtn" type="button">⬇ Cadangkan</button></div></div>
         <div class="panel-body"><div class="toolbar"><input id="hSearch" type="search" placeholder="Cari nomor invoice, nama, atau program…"></div><div class="hlist" id="hList"></div></div></section>
     </section>
+
+    <section class="view" id="usersView">
+      <div class="page-head"><div><div class="eyebrow">Khusus admin</div><h1 class="title">Pengguna &amp; hak akses</h1><p class="desc">Admin membuat User ID dan menentukan apa yang boleh dilakukan setiap orang.</p></div><button class="btn btn-primary" id="uAdd" type="button">＋ Tambah pengguna</button></div>
+      <section class="panel"><div class="panel-head"><div><div class="panel-title">Daftar pengguna</div><div class="panel-sub" id="uCount">0 pengguna</div></div></div><div class="panel-body"><div class="hlist" id="uList"></div></div></section>
+    </section>
   </main>
 
-  <nav class="bnav">
+  <nav class="bnav" id="bnav">
     <button data-nav="create" class="active"><span>✎</span>Buat</button>
     <button data-nav="history"><span>▤</span>Riwayat</button>
+    <button data-nav="users" class="hidden"><span>👥</span>Pengguna</button>
     <button id="bnSettings"><span>⚙</span>Pengaturan</button>
     <!-- logout di Pengaturan pada layar kecil -->
   </nav>
@@ -171,7 +176,7 @@
         <div class="field"><label>Logo di header invoice</label><input id="sLogoFile" type="file" accept="image/*"><div class="imgset"><img id="sLogoPrev" alt=""><span id="sLogoEmpty">Memakai logo Khidma Tour bawaan.</span><button class="sb" id="sLogoClr" type="button">Kembali ke bawaan</button></div></div>
       </div>
       <div class="setgrp" data-admin><h4>Rekening pembayaran</h4>
-        <div class="field"><label>Nama bank</label><input id="sBank" placeholder="Bank Mandiri"></div>
+        <p class="hint" style="margin:0 0 12px">Setiap rekening punya nama bank sendiri. Rekening dengan bank yang sama otomatis dikelompokkan di invoice.</p>
         <div id="sAccs"></div>
         <button class="add" id="sAddAcc" type="button">＋ Tambah rekening</button>
       </div>
@@ -195,6 +200,26 @@
     </div>
   </div>
 </div>
+
+<datalist id="bankList"><option value="Bank Mandiri"><option value="Bank BCA"><option value="Bank BRI"><option value="Bank BNI"><option value="Bank BSI (Syariah Indonesia)"><option value="Bank Muamalat"><option value="Bank CIMB Niaga"><option value="Bank Permata"><option value="Bank BTN"><option value="Bank Danamon"><option value="Bank Jateng"><option value="Bank Jatim"><option value="Bank DKI"><option value="Bank Mega"><option value="Bank OCBC"><option value="Bank Panin"><option value="Bank Syariah Mandiri"><option value="Bank Mandiri Syariah"></datalist>
+
+<div class="mb" id="uModal" role="dialog" aria-modal="true"><div class="modal">
+  <div class="mh"><div><div class="panel-title" id="uTitle">Pengguna</div><div class="panel-sub">Hak akses langsung berlaku di database</div></div><button class="icon-btn" id="uClose" aria-label="Tutup">×</button></div>
+  <div class="mbody">
+    <div id="uAlert" class="alert err hidden"></div>
+    <div class="grid2"><div class="field"><label for="uId">User ID (untuk login)</label><input id="uId" autocapitalize="none" autocorrect="off" spellcheck="false" placeholder="contoh: sari"><div class="hint">Huruf kecil, angka, titik, strip. 3–30 karakter.</div></div>
+    <div class="field"><label for="uName">Nama lengkap</label><input id="uName" placeholder="Nama staf"></div></div>
+    <div class="field"><label id="uPassLbl" for="uPass">Password</label><div style="display:flex;gap:8px"><input id="uPass" autocomplete="off" autocapitalize="none" spellcheck="false" placeholder="min. 8 karakter"><button class="btn btn-ghost" id="uGen" type="button" style="min-height:46px;padding:0 14px">Acak</button></div></div>
+    <div class="field"><label for="uRole">Peran</label><select id="uRole"><option value="staff">Staf (hak akses diatur di bawah)</option><option value="admin">Admin (semua hak akses + kelola pengguna)</option></select></div>
+    <div class="setgrp"><h4>Hak akses</h4>
+      <label class="check"><input type="checkbox" id="upCreate"> Membuat invoice baru</label>
+      <label class="check"><input type="checkbox" id="upEdit"> Mengoreksi invoice yang sudah ada</label>
+      <label class="check"><input type="checkbox" id="upDelete"> Menghapus invoice</label>
+      <label class="check"><input type="checkbox" id="upSettings"> Mengubah pengaturan perusahaan, rekening &amp; logo</label>
+      <div class="hint">Semua pengguna aktif selalu bisa melihat riwayat dan mengunduh PDF.</div></div>
+    <div id="uActiveBox"><label class="check"><input type="checkbox" id="uActive"> Akun aktif (hilangkan centang untuk menonaktifkan tanpa menghapus)</label></div>
+    <div class="macts"><button class="btn btn-danger hidden" id="uDelete" type="button" style="margin-right:auto">Hapus</button><button class="btn btn-ghost" id="uCancel" type="button">Batal</button><button class="btn btn-primary" id="uSave" type="button">Simpan</button></div>
+  </div></div></div>
 
 <div class="mb" id="pdfModal"><div class="modal pdfsheet"><div class="mh"><div><div class="panel-title">PDF siap</div><div class="panel-sub" id="pdfName"></div></div><button class="icon-btn" id="pdfClose" aria-label="Tutup">×</button></div>
   <div class="mbody"><div class="alert ok">PDF berhasil dibuat. Jika unduhan tidak otomatis, gunakan tombol di bawah.</div>
