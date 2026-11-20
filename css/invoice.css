@@ -17,7 +17,7 @@
 .inv-tbl{width:100%;border-collapse:collapse;table-layout:fixed;font-size:12px;border:1px solid #000}
 .inv-tbl th{background:#cfe2f3;font-weight:400;height:25px;text-align:center;border-bottom:1px solid #000;padding:0}
 .inv-tbl td{height:21px;padding:0 5px;text-align:center;vertical-align:middle;overflow:hidden;white-space:nowrap}
-.inv-tbl td.c2{white-space:normal;text-align:right;padding:3px 9px 3px 6px;line-height:15px;overflow-wrap:anywhere;word-break:break-word;hyphens:none}
+.inv-tbl td.c2{white-space:normal;text-align:left;padding:3px 9px 3px 6px;line-height:15px;overflow-wrap:anywhere;word-break:break-word;hyphens:none}
 .inv-tbl tr.b td{background:#f3f3f3}
 .inv-tbl .c2,.inv-tbl .c4{border-left:1px solid #000}
 .inv-m{display:flex;justify-content:space-between;width:100%}
