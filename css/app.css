@@ -194,3 +194,15 @@ h1.title{margin:0;font-size:clamp(24px,3vw,32px);letter-spacing:-.03em;font-weig
 }
 
 .nav-btn.out{color:#b02838}
+
+/* ---- v3: pengguna, chip hak akses, rekening per bank ---- */
+.chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:9px}
+.chip{font-size:11px;font-weight:700;padding:4px 9px;border-radius:99px;background:#f1f2fa;color:#8a90b4}
+.chip.on{background:#e3f8ee;color:#0f7d50}
+.hcard.off{opacity:.6}
+.hmain{min-width:0}
+.btn-danger{background:#ffeceb;color:var(--red);border:0}
+.acc{grid-template-columns:1fr 1fr auto}
+.acc .field.bk{grid-column:1/-1}
+.bnav button.hidden{display:none}
+@media(max-width:700px){.acc .field.bk{grid-column:auto}}

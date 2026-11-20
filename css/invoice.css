@@ -52,3 +52,5 @@
 .inv-sign.end{margin-left:0;align-self:flex-end;margin-right:12px}
 .inv-sign img{display:block;margin:3px auto 4px;height:62px;width:auto;max-width:150px;object-fit:contain}
 .inv-sign .sn{text-decoration:underline}
+
+.inv-bank .bk.gap{margin-top:11px}
